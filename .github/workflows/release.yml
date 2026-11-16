@@ -160,10 +160,13 @@ jobs:
 
           tag_exists "$version" && fail "Tag $version already exists."
 
-          echo "Latest stable: $stable_tag → releasing $version (mod loader version $base.$revision)"
+          # Stable builds use the plain X.Y.Z; pre-releases get a fourth number the mod loader can order.
+          if [ "$prerelease" = true ]; then assembly_version="$base.$revision"; else assembly_version="$base"; fi
+
+          echo "Latest stable: $stable_tag → releasing $version (mod loader version $assembly_version)"
           {
             echo "version=$version"
-            echo "assembly_version=$base.$revision"
+            echo "assembly_version=$assembly_version"
             echo "prerelease=$prerelease"
             echo "notes_start=$notes_start"
             echo "sha=$(git rev-parse HEAD)"
@@ -174,6 +177,7 @@ jobs:
     runs-on: windows-2025
     outputs:
       zip: ${{ steps.zip.outputs.name }}
+      project: ${{ steps.project.outputs.path }}
     env:
       PACKAGE_DIR: C:\out\package
       ASSEMBLY_VERSION: ${{ needs.version.outputs.assembly-version }}
@@ -328,13 +332,53 @@ jobs:
     outputs:
       notes: ${{ steps.release.outputs.notes }}
     steps:
+      - name: Checkout built commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.version.outputs.sha }}
+          path: source
+
+      # Stable: commit the version to the default branch and tag it, in one atomic push.
+      # Pre-release: the version commit is only reachable through its tag, so the branch stays clean.
+      - name: Commit version and push tag
+        working-directory: source
+        env:
+          PROJECT: ${{ needs.build.outputs.project }}
+          VERSION: ${{ needs.version.outputs.version }}
+          ASSEMBLY_VERSION: ${{ needs.version.outputs.assembly-version }}
+          PRERELEASE: ${{ needs.version.outputs.prerelease }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        run: |
+          set -euo pipefail
+          perl -0pi -e '
+            my $v = $ENV{ASSEMBLY_VERSION};
+            if (!s{<Version>[^<]*</Version>}{<Version>$v</Version>}) {
+              s{(<PropertyGroup>(\r?\n)([ \t]*))}{$1<Version>$v</Version>$2$3} or die "No <PropertyGroup> to add <Version> to\n";
+            }' "$PROJECT"
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          if git diff --quiet; then
+            echo "$PROJECT already has <Version>$ASSEMBLY_VERSION</Version>"
+          else
+            git commit -q -am "chore: release $VERSION"
+          fi
+          git tag "$VERSION"
+
+          if [ "$PRERELEASE" = true ]; then
+            git push origin "refs/tags/$VERSION"
+          else
+            git push --atomic origin "HEAD:refs/heads/$DEFAULT_BRANCH" "refs/tags/$VERSION" \
+              || { echo "::error::Could not push to $DEFAULT_BRANCH. It may have moved during the build (re-run the release), or a branch rule blocks the push."; exit 1; }
+          fi
+
       - name: Download package
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: mod-package
           path: package
 
-      - name: Create tag and GitHub release
+      - name: Create GitHub release
         id: release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -343,11 +387,10 @@ jobs:
           ASSEMBLY_VERSION: ${{ needs.version.outputs.assembly-version }}
           PRERELEASE: ${{ needs.version.outputs.prerelease }}
           NOTES_START: ${{ needs.version.outputs.notes-start }}
-          SHA: ${{ needs.version.outputs.sha }}
           ZIP: package/${{ needs.build.outputs.zip }}
         run: |
           set -euo pipefail
-          args=(--repo "$REPO" --target "$SHA" --title "$VERSION" --generate-notes --notes-start-tag "$NOTES_START")
+          args=(--repo "$REPO" --verify-tag --title "$VERSION" --generate-notes --notes-start-tag "$NOTES_START")
           if [ "$PRERELEASE" = true ]; then
             args+=(--prerelease)
           else

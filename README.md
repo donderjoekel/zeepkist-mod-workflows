@@ -22,10 +22,14 @@ What happens:
 
 1. **version**: reads the git tags and works out the next version. It fails early if the tag already exists, if there is no stable tag yet, or if a stable release is missing its mod.io id or secret.
 2. **build** (Windows): runs the tests, then publishes the Debug build with the version applied (`-p:Version`). It runs the verify script if there is one, converts symbols to `.mdb` with a pinned and cached Mono, and zips the result.
-3. **publish**: creates the tag on the exact commit that was built, then a GitHub release with notes generated since the previous tag and the zip attached.
+3. **publish**: writes the version into the csproj and commits `chore: release <version>` on top of the built commit. A stable release pushes that commit to the default branch together with the tag, in one atomic push. A pre-release only pushes the tag, so the branch it ran from is unchanged. Then it creates a GitHub release with notes generated since the previous tag and the zip attached.
 4. **modio** (stable only): uploads the zip to mod.io with the release notes as changelog.
 
-Git tags are the only source of version numbers. The `<Version>` in the csproj is not used for releases. Pre-release builds get a four-part version the mod loader understands: alpha → `.1xx`, beta → `.2xx`, rc → `.3xx`, where `xx` is the iteration. For example, `1.1.0-beta.2` becomes `1.1.0.202`.
+Git tags decide the next version, and each release writes it back into the csproj. After a stable release, `<Version>` on the default branch matches the version on mod.io. Don't edit `<Version>` by hand; `version-check` rejects PRs that do.
+
+Stable releases use `X.Y.Z` as the mod loader version. Pre-releases get a fourth number the mod loader understands: alpha → `.1xx`, beta → `.2xx`, rc → `.3xx`, where `xx` is the iteration. For example, `1.1.0-beta.2` becomes `1.1.0.202`, and the tag's csproj says so too.
+
+Stable releases push to the default branch with the workflow's `GITHUB_TOKEN`. If a branch ruleset requires status checks, add **GitHub Actions** as a bypass actor, or the push is rejected.
 
 ## Adding a mod
 

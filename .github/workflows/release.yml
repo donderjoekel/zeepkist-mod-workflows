@@ -340,10 +340,16 @@ jobs:
       - name: Create release app token
         id: app-token
         if: vars.RELEASE_APP_CLIENT_ID != ''
+        # Not fatal: e.g. the app isn't installed on this repo. Pushes then use GITHUB_TOKEN instead.
+        continue-on-error: true
         uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
         with:
           client-id: ${{ vars.RELEASE_APP_CLIENT_ID }}
           private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
+
+      - name: Warn about release app fallback
+        if: steps.app-token.outcome == 'failure'
+        run: echo "::warning::Couldn't get a token from the release app (is it installed on this repository?). Pushing with GITHUB_TOKEN, which can't bypass branch rulesets."
 
       - name: Checkout built commit
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1

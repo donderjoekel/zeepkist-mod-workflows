@@ -56,6 +56,9 @@ on:
     secrets:
       MODIO_BEARER:
         required: false
+      RELEASE_APP_PRIVATE_KEY:
+        description: Private key of the org's release GitHub App (with the RELEASE_APP_CLIENT_ID variable)
+        required: false
     outputs:
       version:
         description: The version that was released
@@ -332,11 +335,22 @@ jobs:
     outputs:
       notes: ${{ steps.release.outputs.notes }}
     steps:
+      # Pushes with the org's release app when configured, so branch rulesets can let it bypass
+      # required checks (GITHUB_TOKEN can't be a ruleset bypass actor). Falls back to GITHUB_TOKEN.
+      - name: Create release app token
+        id: app-token
+        if: vars.RELEASE_APP_CLIENT_ID != ''
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        with:
+          client-id: ${{ vars.RELEASE_APP_CLIENT_ID }}
+          private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
+
       - name: Checkout built commit
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ needs.version.outputs.sha }}
           path: source
+          token: ${{ steps.app-token.outputs.token || github.token }}
 
       # Stable: commit the version to the default branch and tag it, in one atomic push.
       # Pre-release: the version commit is only reachable through its tag, so the branch stays clean.

@@ -29,7 +29,7 @@ Git tags decide the next version, and each release writes it back into the cspro
 
 Stable releases use `X.Y.Z` as the mod loader version. Pre-releases get a fourth number the mod loader understands: alpha → `.1xx`, beta → `.2xx`, rc → `.3xx`, where `xx` is the iteration. For example, `1.1.0-beta.2` becomes `1.1.0.202`, and the tag's csproj says so too.
 
-Stable releases push to the default branch with the workflow's `GITHUB_TOKEN`. If a branch ruleset requires status checks, add **GitHub Actions** as a bypass actor, or the push is rejected.
+Stable releases push the version commit and tag with the org's **zeepkist-release** GitHub App when the `RELEASE_APP_CLIENT_ID` org variable and `RELEASE_APP_PRIVATE_KEY` org secret exist, and with `GITHUB_TOKEN` otherwise. For a mod whose default branch has a ruleset (for example required status checks), install the app on that repo and add it to the ruleset's bypass list. GitHub Actions itself can't be a ruleset bypass actor, which is why the app is needed.
 
 ## Adding a mod
 

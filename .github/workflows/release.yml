@@ -315,7 +315,20 @@ jobs:
         run: |
           $name = "$env:REPO_NAME-$env:VERSION.zip"
           $dst = Join-Path 'C:\out' $name
-          Compress-Archive -Path "$env:PACKAGE_DIR\*" -DestinationPath $dst -Force
+          if (Test-Path $dst) { Remove-Item $dst -Force }
+          # ZipFile writes '/' separators. Backslash entry names (as Windows PowerShell's Compress-Archive
+          # produces) extract as flat files named 'dir\file' on Linux, breaking mods with subfolders.
+          Add-Type -AssemblyName System.IO.Compression.FileSystem
+          [System.IO.Compression.ZipFile]::CreateFromDirectory($env:PACKAGE_DIR, $dst, [System.IO.Compression.CompressionLevel]::Optimal, $false)
+          $zip = [System.IO.Compression.ZipFile]::OpenRead($dst)
+          try {
+            $entries = @($zip.Entries | ForEach-Object FullName)
+          } finally {
+            $zip.Dispose()
+          }
+          $entries | ForEach-Object { Write-Output "  $_" }
+          $bad = @($entries | Where-Object { $_.Contains('\') })
+          if ($bad.Count -gt 0) { throw "Zip entries contain backslashes: $($bad -join ', ')" }
           "name=$name" >> $env:GITHUB_OUTPUT
           "path=$dst" >> $env:GITHUB_OUTPUT
 

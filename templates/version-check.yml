@@ -1,0 +1,11 @@
+name: version-check
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  version-check:
+    uses: donderjoekel/zeepkist-mod-workflows/.github/workflows/version-check.yml@v1

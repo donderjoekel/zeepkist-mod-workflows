@@ -1,0 +1,35 @@
+name: version-check
+
+# Versions come from git tags (see release.yml), so pull requests must not edit them by hand.
+on:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  version-unchanged:
+    runs-on: ubuntu-26.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Ensure version was not edited manually
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          changes=$(git diff "$BASE_SHA...$HEAD_SHA" -- '*.csproj' '*.props' '*.targets' \
+            | grep -E '^[+-][[:space:]]*<(Version|VersionPrefix|VersionSuffix|AssemblyVersion|FileVersion|InformationalVersion)>' \
+            || true)
+
+          if [ -n "$changes" ]; then
+            echo "::error::This PR changes the mod version. Versions come from git tags and are set by the release workflow (Actions → release → Run workflow); revert these lines:"
+            echo "$changes"
+            exit 1
+          fi
+
+          echo "Version untouched."

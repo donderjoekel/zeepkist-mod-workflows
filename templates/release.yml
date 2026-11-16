@@ -1,0 +1,47 @@
+name: release
+
+on:
+  workflow_dispatch:
+    inputs:
+      bump:
+        description: Which part of the version to bump (from the latest stable tag)
+        required: true
+        type: choice
+        options:
+          - patch
+          - minor
+          - major
+      stage:
+        description: stable goes to mod.io; alpha/beta/rc only create a GitHub pre-release
+        required: true
+        type: choice
+        default: stable
+        options:
+          - stable
+          - alpha
+          - beta
+          - rc
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    uses: donderjoekel/zeepkist-mod-workflows/.github/workflows/release.yml@v1
+    with:
+      bump: ${{ inputs.bump }}
+      stage: ${{ inputs.stage }}
+      mod-id: 0 # TODO: mod.io mod id
+      # Optional, remove what you don't need:
+      # project: MyMod/MyMod.csproj           # when the .csproj isn't the only one in the repo root
+      # test-projects: |
+      #   MyMod.Tests/MyMod.Tests.csproj
+      # pdb2mdb-extra: |
+      #   MyMod.Extra.dll
+      # pre-build-script: ./Check-Something.ps1
+      # verify-script: ./Verify-Package.ps1
+    secrets: inherit
